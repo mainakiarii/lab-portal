@@ -21,31 +21,45 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- OFFICIAL THEME & UI ---
 st.set_page_config(page_title="Official Lab Sample Portal", page_icon="🧪", layout="wide")
 
-# Sidebar Branding
-st.sidebar.markdown(f"## 🧪 Lab LIMS v1.0\n**Logged in as:** Authorized Staff")
-st.sidebar.divider()
-
+# --- LOGIN / LOGOUT LOGIC ---
 if "auth" not in st.session_state:
     st.session_state["auth"] = False
 
+def logout():
+    st.session_state["auth"] = False
+    st.rerun()
+
+# --- LOGIN SCREEN ---
 if not st.session_state["auth"]:
     st.title("🔐 Laboratory Information Management System")
-    st.info("Enter the secure team password to access the sample database.")
-    pwd = st.text_input("Security Password", type="password")
-    if st.button("Unlock Portal"):
-        if pwd == PORTAL_PASSWORD:
-            st.session_state["auth"] = True
-            st.rerun()
-        else:
-            st.error("Invalid credentials.")
+    st.info("Authorized access only. Please enter the team security password.")
+    
+    with st.container():
+        pwd = st.text_input("Security Password", type="password")
+        if st.button("Unlock Portal"):
+            if pwd == PORTAL_PASSWORD:
+                st.session_state["auth"] = True
+                st.rerun()
+            else:
+                st.error("Invalid credentials. Please try again.")
+
+# --- AUTHORIZED PORTAL ---
 else:
     init_db()
+    
+    # Sidebar Navigation & Logout
+    st.sidebar.markdown(f"## 🧪 Lab LIMS v1.1")
+    st.sidebar.success("Access Granted")
+    
     menu = st.sidebar.radio("MAIN MENU", ["📊 Dashboard", "📥 Sample Reception", "🔍 Inventory Management"])
+    
+    st.sidebar.divider()
+    if st.sidebar.button("🔌 Log Off / Lock Portal"):
+        logout()
 
-    # --- 1. DASHBOARD (The "Official Face") ---
+    # --- 1. DASHBOARD ---
     if menu == "📊 Dashboard":
         st.title("📈 Lab Operations Overview")
         conn = sqlite3.connect(DB_FILE)
@@ -57,11 +71,11 @@ else:
         col2.metric("Active Projects", df['project'].nunique() if not df.empty else 0)
         col3.metric("Last Entry", df['date_received'].iloc[-1] if not df.empty else "N/A")
 
-        st.subheader("Sample Distribution by Freezer")
         if not df.empty:
+            st.subheader("Sample Distribution by Freezer")
             st.bar_chart(df['location'].value_counts())
         else:
-            st.write("No data available yet. Please register a sample.")
+            st.info("No data available yet. Please register a sample in the Reception tab.")
 
     # --- 2. REGISTRATION ---
     elif menu == "📥 Sample Reception":
@@ -92,14 +106,20 @@ else:
         df = pd.read_sql_query("SELECT * FROM samples ORDER BY id DESC", conn)
         conn.close()
 
-        search = st.text_input("Filter by ID or Project...")
+        search = st.text_input("Filter inventory by ID, Project, or Material...")
         if search:
             df = df[df.apply(lambda row: row.astype(str).str.contains(search, case=False).any(), axis=1)]
 
         st.dataframe(df, use_container_width=True)
         
+        # Export Button
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("📂 Download Inventory (CSV)", csv, "lab_inventory.csv", "text/csv")
+
+        st.divider()
         st.subheader("🔄 Relocate or Update Sample")
         target_id = st.selectbox("Select ID to Edit", ["-- Select ID --"] + df['sample_id'].tolist())
+        
         if target_id != "-- Select ID --":
             row = df[df['sample_id'] == target_id].iloc[0]
             with st.form("edit_box"):
