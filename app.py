@@ -13,7 +13,7 @@ def hash_pass(pwd):
     return hashlib.sha256(pwd.encode()).hexdigest()
 
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS samples 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, date_received TEXT, project TEXT, 
