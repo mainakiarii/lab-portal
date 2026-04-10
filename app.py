@@ -11,6 +11,7 @@ FREEZERS = ["Freezer A (-20°C)", "Freezer B (-80°C)", "Fridge 1 (4°C)", "Benc
 def hash_pass(pwd):
     return hashlib.sha256(pwd.encode()).hexdigest()
 
+
 def init_db():# --- DATABASE LOGIC ---
     # --- DATABASE LOGIC ---
 def init_db():
