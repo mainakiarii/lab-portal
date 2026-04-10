@@ -37,7 +37,7 @@ def init_db():# --- DATABASE LOGIC ---
     conn.close()
 
 # CRITICAL: Run this immediately so tables exist before any user clicks anything
-init_db()
+    init_db()
     conn = sqlite3.connect
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS samples 
