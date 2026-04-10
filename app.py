@@ -5,7 +5,6 @@ import hashlib
 from datetime import datetime
 
 # --- SYSTEM CONFIG ---
-DB_FILE = "lab_lims_v5_final.db"
 SAMPLE_TYPES = ["Serum", "Plasma", "Whole Blood", "Swabs", "Urine", "Other"]
 FREEZERS = ["Freezer A (-20°C)", "Freezer B (-80°C)", "Fridge 1 (4°C)", "Bench Top", "Shipped/Out"]
 
@@ -13,6 +12,32 @@ def hash_pass(pwd):
     return hashlib.sha256(pwd.encode()).hexdigest()
 
 def init_db():# --- DATABASE LOGIC ---
+    # --- DATABASE LOGIC ---
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    # Ensure all tables exist before any queries run
+    c.execute('''CREATE TABLE IF NOT EXISTS samples 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, date_received TEXT, project TEXT, 
+                  sample_id TEXT, sample_type TEXT, location TEXT, staff TEXT)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS users 
+                 (username TEXT PRIMARY KEY, password TEXT, full_name TEXT, role TEXT)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS reset_requests 
+                 (username TEXT PRIMARY KEY, request_time TEXT, status TEXT)''')
+    
+    # Re-insert the master admin
+    c.execute("SELECT * FROM users WHERE username='admin'")
+    if not c.fetchone():
+        admin_pass = hashlib.sha256("Gedieon2026".encode()).hexdigest()
+        c.execute("INSERT INTO users VALUES (?,?,?,?)", ("admin", admin_pass, "Gedieon Kiarii", "Admin"))
+    
+    conn.commit()
+    conn.close()
+
+# RUN THIS AT THE VERY TOP LEVEL OF YOUR SCRIPT
+init_db()
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     # 1. Create Samples Table
