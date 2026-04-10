@@ -12,7 +12,32 @@ FREEZERS = ["Freezer A (-20°C)", "Freezer B (-80°C)", "Fridge 1 (4°C)", "Benc
 def hash_pass(pwd):
     return hashlib.sha256(pwd.encode()).hexdigest()
 
-def init_db():
+def init_db():# --- DATABASE LOGIC ---
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    # 1. Create Samples Table
+    c.execute('''CREATE TABLE IF NOT EXISTS samples 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, date_received TEXT, project TEXT, 
+                  sample_id TEXT, sample_type TEXT, location TEXT, staff TEXT)''')
+    
+    # 2. Create Users Table
+    c.execute('''CREATE TABLE IF NOT EXISTS users 
+                 (username TEXT PRIMARY KEY, password TEXT, full_name TEXT, role TEXT)''')
+    
+    # 3. Create Reset Requests Table (This is the one causing the error)
+    c.execute('''CREATE TABLE IF NOT EXISTS reset_requests 
+                 (username TEXT PRIMARY KEY, request_time TEXT, status TEXT)''')
+    
+    # 4. Ensure Admin exists
+    c.execute("SELECT * FROM users WHERE username='admin'")
+    if not c.fetchone():
+        c.execute("INSERT INTO users VALUES (?,?,?,?)", ("admin", hash_pass("Gedieon2026"), "Gedieon Kiarii", "Admin"))
+    
+    conn.commit()
+    conn.close()
+
+# CRITICAL: Run this immediately so tables exist before any user clicks anything
+init_db()
     conn = sqlite3.connect
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS samples 
