@@ -5,7 +5,7 @@ import hashlib
 from datetime import datetime
 
 # --- SYSTEM CONFIG ---
-DB_FILE = "lab_lims_final_v5.db"
+DB_FILE = "lab_lims_v5_final.db"
 SAMPLE_TYPES = ["Serum", "Plasma", "Whole Blood", "Swabs", "Urine", "Other"]
 FREEZERS = ["Freezer A (-20°C)", "Freezer B (-80°C)", "Fridge 1 (4°C)", "Bench Top", "Shipped/Out"]
 
@@ -20,7 +20,6 @@ def init_db():
                   sample_id TEXT, sample_type TEXT, location TEXT, staff TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (username TEXT PRIMARY KEY, password TEXT, full_name TEXT, role TEXT)''')
-    # Table to track forgot password requests
     c.execute('''CREATE TABLE IF NOT EXISTS reset_requests 
                  (username TEXT PRIMARY KEY, request_time TEXT, status TEXT)''')
     
@@ -38,11 +37,9 @@ if "auth" not in st.session_state:
 # --- LOGIN / SIGN UP / FORGOT PWD ---
 if not st.session_state["auth"]:
     st.markdown("<h1 style='text-align: center;'>🔬 Institutional Laboratory Portal</h1>", unsafe_allow_html=True)
-    
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         mode = st.radio("System Access", ["Sign In", "Request Account", "Forgot Password"], horizontal=True)
-        
         with st.container(border=True):
             if mode == "Sign In":
                 u = st.text_input("Username")
@@ -56,85 +53,107 @@ if not st.session_state["auth"]:
                     if res:
                         st.session_state.update({"auth": True, "user": u, "full_name": res[0], "role": res[1]})
                         st.rerun()
-                    else:
-                        st.error("Invalid credentials. If you forgot your password, click 'Forgot Password' above.")
-            
+                    else: st.error("Invalid credentials.")
             elif mode == "Request Account":
                 n_name = st.text_input("Full Name")
                 n_u = st.text_input("Desired Username")
                 n_p = st.text_input("Set Password", type="password")
-                if st.button("Register Staff Account"):
+                if st.button("Register Account"):
                     try:
                         conn = sqlite3.connect(DB_FILE)
                         c = conn.cursor()
                         c.execute("INSERT INTO users VALUES (?,?,?,?)", (n_u, hash_pass(n_p), n_name, "Staff"))
                         conn.commit()
                         conn.close()
-                        st.success("Account created! You can now Sign In.")
-                    except: st.error("Username already exists.")
-
+                        st.success("Account created! Please Sign In.")
+                    except: st.error("Username exists.")
             elif mode == "Forgot Password":
-                st.subheader("Password Reset Request")
-                st.write("Enter your username. The Admin will reset your password to a temporary one.")
-                f_u = st.text_input("Your Username")
+                f_u = st.text_input("Enter your Username")
                 if st.button("Submit Reset Request"):
                     conn = sqlite3.connect(DB_FILE)
                     c = conn.cursor()
                     c.execute("SELECT * FROM users WHERE username=?", (f_u,))
                     if c.fetchone():
-                        c.execute("INSERT OR REPLACE INTO reset_requests VALUES (?,?,?)", 
-                                  (f_u, datetime.now().strftime("%Y-%m-%d %H:%M"), "Pending"))
+                        c.execute("INSERT OR REPLACE INTO reset_requests VALUES (?,?,?)", (f_u, datetime.now().strftime("%Y-%m-%d %H:%M"), "Pending"))
                         conn.commit()
-                        st.success("Request sent to Admin. Please contact Gedieon to receive your new temporary password.")
-                    else:
-                        st.error("Username not found in system.")
+                        st.success("Request sent to Admin.")
+                    else: st.error("User not found.")
                     conn.close()
-
-# --- AUTHORIZED PORTAL ---
 else:
     init_db()
     st.sidebar.title("🧪 Lab LIMS v2.5")
-    st.sidebar.write(f"Officer: **{st.session_state['full_name']}**")
-    
-    tabs = ["📊 Dashboard", "📥 Reception", "🔍 Inventory"]
-    if st.session_state["role"] == "Admin":
-        tabs.append("👥 Staff & Security")
-    
-    menu = st.sidebar.radio("Navigation", tabs)
-    
-    if st.sidebar.button("🔌 Secure Logout", use_container_width=True):
+    st.sidebar.write(f"User: **{st.session_state['full_name']}**")
+    menu = st.sidebar.radio("Menu", ["📊 Dashboard", "📥 Reception", "🔍 Inventory", "👥 Staff Management"])
+    if st.sidebar.button("🔌 Logout"):
         st.session_state.update({"auth": False, "user": None})
         st.rerun()
 
-    # --- STAFF & SECURITY (ADMIN RESET PANEL) ---
-    if menu == "👥 Staff & Security":
-        st.header("Security Administration")
-        
-        # Section 1: Reset Requests
-        st.subheader("⚠️ Pending Password Reset Requests")
+    if menu == "📊 Dashboard":
+        st.title("Laboratory Dashboard")
         conn = sqlite3.connect(DB_FILE)
-        req_df = pd.read_sql_query("SELECT * FROM reset_requests WHERE status='Pending'", conn)
-        
-        if not req_df.empty:
-            st.table(req_df)
-            target = st.selectbox("Action: Select User to Reset", req_df['username'].tolist())
-            new_temp = st.text_input("New Temporary Password", type="password")
-            if st.button("Approve & Reset Password"):
-                c = conn.cursor()
-                c.execute("UPDATE users SET password=? WHERE username=?", (hash_pass(new_temp), target))
-                c.execute("UPDATE reset_requests SET status='Completed' WHERE username=?", (target,))
-                conn.commit()
-                st.success(f"Password for {target} has been updated. Notify the staff member.")
-        else:
-            st.info("No pending reset requests.")
-        
-        st.divider()
-        # Section 2: User List
-        st.subheader("All Registered Personnel")
-        u_df = pd.read_sql_query("SELECT username, full_name, role FROM users", conn)
-        st.dataframe(u_df, use_container_width=True)
+        df = pd.read_sql_query("SELECT * FROM samples", conn)
         conn.close()
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Samples", len(df))
+        c2.metric("Projects", df['project'].nunique() if not df.empty else 0)
+        c3.metric("Status", "Online")
+        if not df.empty: st.bar_chart(df['location'].value_counts())
 
-    # --- REMAINING TABS (INVENTORY, RECEPTION, DASHBOARD) ---
+    elif menu == "📥 Reception":
+        st.header("New Sample Entry")
+        with st.form("reg"):
+            c1, c2 = st.columns(2)
+            proj = c1.text_input("Project Name")
+            sid = c1.text_input("Sample ID")
+            stype = c2.selectbox("Type", SAMPLE_TYPES)
+            loc = c2.selectbox("Storage", FREEZERS)
+            if st.form_submit_button("Log Entry"):
+                conn = sqlite3.connect(DB_FILE)
+                c = conn.cursor()
+                c.execute("INSERT INTO samples (date_received, project, sample_id, sample_type, location, staff) VALUES (?,?,?,?,?,?)",
+                          (datetime.now().strftime("%Y-%m-%d"), proj, sid, stype, loc, st.session_state['full_name']))
+                conn.commit()
+                st.success("Logged!")
+
     elif menu == "🔍 Inventory":
-        # (
+        st.header("Inventory Management")
+        conn = sqlite3.connect(DB_FILE)
+        df = pd.read_sql_query("SELECT * FROM samples ORDER BY id DESC", conn)
+        conn.close()
+        search = st.text_input("Search...")
+        if search:
+            df = df[df.apply(lambda row: row.astype(str).str.contains(search, case=False).any(), axis=1)]
+        st.dataframe(df, use_container_width=True)
+        
+        st.subheader("Move Sample")
+        target = st.selectbox("ID to move", ["-- Select --"] + df['sample_id'].tolist())
+        if target != "-- Select --":
+            with st.form("move"):
+                new_l = st.selectbox("New Location", FREEZERS)
+                if st.form_submit_button("Update Location"):
+                    conn = sqlite3.connect(DB_FILE)
+                    c = conn.cursor()
+                    c.execute("UPDATE samples SET location=?, staff=? WHERE sample_id=?", (new_l, st.session_state['full_name'], target))
+                    conn.commit()
+                    st.success("Moved!")
+                    st.rerun()
+
+    elif menu == "👥 Staff Management":
+        if st.session_state["role"] == "Admin":
+            st.header("Staff Administration")
+            conn = sqlite3.connect(DB_FILE)
+            req_df = pd.read_sql_query("SELECT * FROM reset_requests WHERE status='Pending'", conn)
+            if not req_df.empty:
+                st.warning("Pending Password Resets")
+                st.table(req_df)
+                t_user = st.selectbox("Reset User", req_df['username'].tolist())
+                t_pass = st.text_input("New Temp Password", type="password")
+                if st.button("Reset Now"):
+                    c = conn.cursor()
+                    c.execute("UPDATE users SET password=? WHERE username=?", (hash_pass(t_pass), t_user))
+                    c.execute("UPDATE reset_requests SET status='Done' WHERE username=?", (t_user,))
+                    conn.commit()
+                    st.success("Done!")
+            else: st.info("No reset requests.")
+            conn.close()
+        else: st.error("Admin access required.")
