@@ -1,10 +1,8 @@
 import streamlit as st
-import pd as pd
+import pandas as pd
 import sqlite3
 import hashlib
-import pandas as pd
 from datetime import datetime
-
 # --- SYSTEM CONFIG ---
 DB_FILE = "lab_inventory_v6.db"
 SAMPLE_TYPES = ["Serum", "Plasma", "Whole Blood", "Swabs", "Urine", "Other"]
